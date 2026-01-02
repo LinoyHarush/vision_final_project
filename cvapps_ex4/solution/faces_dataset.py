@@ -1,6 +1,7 @@
 """Custom faces dataset."""
 import os
 
+import PIL
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
@@ -26,10 +27,19 @@ class FacesDataset(Dataset):
     def __getitem__(self, index) -> tuple[torch.Tensor, int]:
         """Get a sample and label from the dataset."""
         """INSERT YOUR CODE HERE, overrun return."""
-
+        if index < len(self.real_image_names):
+            rel_list = self.real_image_names
+            rel_path = os.path.join(self.root_path, 'real')
+            label = 0
+        else:
+            rel_list = self.fake_image_names
+            rel_path = os.path.join(self.root_path, 'fake')
+            label = 1
+            index -= len(self.real_image_names)
+        img = PIL.Image.open(os.path.join(rel_path, rel_list[index])).convert('RGB')
+        return img , label
         return torch.rand((3, 256, 256)), int(torch.randint(0, 2, size=(1, )))
 
     def __len__(self):
         """Return the number of images in the dataset."""
-        """INSERT YOUR CODE HERE, overrun return."""
-        return 100
+        return len(self.real_image_names) + len(self.fake_image_names)
