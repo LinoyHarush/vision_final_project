@@ -1,1 +1,2 @@
-{\rtf1}
+Computer Vision Final Project
+
