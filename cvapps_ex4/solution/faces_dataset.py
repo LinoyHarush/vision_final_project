@@ -36,9 +36,10 @@ class FacesDataset(Dataset):
             rel_path = os.path.join(self.root_path, 'fake')
             label = 1
             index -= len(self.real_image_names)
-        img = PIL.Image.open(os.path.join(rel_path, rel_list[index])).convert('RGB')
-        return img , label
-        return torch.rand((3, 256, 256)), int(torch.randint(0, 2, size=(1, )))
+        img = Image.open(os.path.join(rel_path, rel_list[index])).convert('RGB')
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, label
 
     def __len__(self):
         """Return the number of images in the dataset."""
