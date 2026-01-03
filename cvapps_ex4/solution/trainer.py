@@ -58,9 +58,22 @@ class Trainer:
                                       self.batch_size,
                                       shuffle=True)
         print_every = int(len(train_dataloader) / 10)
-
         for batch_idx, (inputs, targets) in enumerate(train_dataloader):
             """INSERT YOUR CODE HERE."""
+            self.optimizer.zero_grad()
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, targets)
+            loss.backward()
+            self.optimizer.step()
+
+            total_loss += loss.item() * inputs.size(0)
+            nof_samples += inputs.size(0)
+            _, predicted = torch.max(outputs, 1)
+            correct_labeled_samples += (predicted == targets).sum().item()
+            avg_loss = total_loss / nof_samples
+            accuracy = 100.0 * correct_labeled_samples / nof_samples
+
             if batch_idx % print_every == 0 or \
                     batch_idx == len(train_dataloader) - 1:
                 print(f'Epoch [{self.epoch:03d}] | Loss: {avg_loss:.3f} | '
@@ -92,7 +105,15 @@ class Trainer:
         print_every = max(int(len(dataloader) / 10), 1)
 
         for batch_idx, (inputs, targets) in enumerate(dataloader):
-            """INSERT YOUR CODE HERE."""
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, targets)
+            total_loss += loss.item() * inputs.size(0)
+            nof_samples += inputs.size(0)
+            _, predicted = torch.max(outputs, 1)
+            correct_labeled_samples += (predicted == targets).sum().item()
+            avg_loss = total_loss / nof_samples
+            accuracy = 100.0 * correct_labeled_samples / nof_samples
+
             if batch_idx % print_every == 0 or batch_idx == len(dataloader) - 1:
                 print(f'Epoch [{self.epoch:03d}] | Loss: {avg_loss:.3f} | '
                       f'Acc: {accuracy:.2f}[%] '
@@ -102,9 +123,11 @@ class Trainer:
 
     def validate(self):
         """Evaluate the model performance."""
+        print('Validation:')
         return self.evaluate_model_on_dataloader(self.validation_dataset)
 
     def test(self):
+        print('Test:')
         """Test the model performance."""
         return self.evaluate_model_on_dataloader(self.test_dataset)
 
