@@ -41,5 +41,18 @@ def get_xception_based_model() -> nn.Module:
     (2) Override `custom_network`'s fc attribute with the binary
     classification head stated in the exercise.
     """
-    """INSERT YOUR CODE HERE, overrun return."""
-    return SimpleNet()
+
+    model = build_xception_backbone(pretrained=False)
+    in_features = getattr(model, 'fc').in_features
+    classifier = nn.Sequential(
+        nn.Linear(in_features, 1000),
+        nn.ReLU(inplace=True),
+        nn.Linear(1000, 256),
+        nn.ReLU(inplace=True),
+        nn.Linear(256, 64),
+        nn.ReLU(inplace=True),
+        nn.Linear(64, 2),
+    )
+
+    model.fc = classifier
+    return model
