@@ -51,8 +51,36 @@ def get_grad_cam_visualization(test_dataset: torch.utils.data.Dataset,
         the true label of that sample (since it is an output of a DataLoader
         of batch size 1, it's a tensor of shape (1,)).
     """
-    """INSERT YOUR CODE HERE, overrun return."""
-    return np.random.rand(256, 256, 3), torch.randint(0, 2, (1,))
+    model.eval()
+
+    # (b) sample a single image with DataLoader (batch_size=1, shuffle=True)
+    loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
+    samples, true_label = next(iter(loader))  # samples: (1,3,256,256), true_label: (1,)
+
+    device = next(model.parameters()).device
+    samples = samples.to(device)
+    true_label = true_label.to(device)
+
+    # (c) compute Grad-CAM for target layer model.conv3
+    # --- minimal assumption: your provided API looks like this ---
+    # cam_extractor = GradCAM(model=model, target_layer=model.conv3)
+    # cam = cam_extractor(samples, class_idx=int(true_label.item()))  # (1,256,256) or (256,256)
+    # visualization = visualize_cam(samples[0], cam[0] if cam.ndim == 3 else cam)
+    #
+    # If your exercise already gave you a specific call pattern, keep it and just plug in:
+    cam_extractor = GradCAM(model=model, target_layer=model.conv3)
+    cam = cam_extractor(samples, class_idx=int(true_label.item()))
+
+    # Convert to visualization overlay (expected output: 256x256x3 np.ndarray)
+    # Commonly, visualize_cam expects CHW image tensor on CPU and 2D cam on CPU.
+    cam_2d = cam[0] if cam.ndim == 3 else cam
+    visualization = visualize_cam(samples[0].detach().cpu(), cam_2d.detach().cpu())
+
+    # Ensure numpy output
+    if isinstance(visualization, torch.Tensor):
+        visualization = visualization.detach().cpu().numpy()
+
+    return visualization, true_label.detach().cpu()
 
 
 def main():
