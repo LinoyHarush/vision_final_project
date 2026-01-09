@@ -42,7 +42,7 @@ def get_xception_based_model() -> nn.Module:
     classification head stated in the exercise.
     """
 
-    model = build_xception_backbone(pretrained=False)
+    model = build_xception_backbone(pretrained=True)
     in_features = getattr(model, 'fc').in_features
     classifier = nn.Sequential(
         nn.Linear(in_features, 1000),
