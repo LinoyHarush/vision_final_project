@@ -59,46 +59,42 @@ def get_grad_cam_visualization(test_dataset: torch.utils.data.Dataset,
     from pytorch_grad_cam.utils.image import show_cam_on_image
     from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
-    device = next(model.parameters()).device
-    model.eval()
+    # Ensure we use the "real" model if wrapped (DataParallel/DistributedDataParallel)
+    core_model = model.module if hasattr(model, "module") else model
+    device = next(core_model.parameters()).device
+    core_model.eval()
 
-    # Sample one image
+    # b) Sample a single image (batch_size=1, shuffle=True)
     loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
     x, y = next(iter(loader))  # x: (1,C,H,W), y: (1,)
     x = x.to(device)
 
-    # IMPORTANT: Grad-CAM needs grads
-    torch.set_grad_enabled(True)
-
-    # Handle DataParallel / DDP style wrapping
-    core_model = model.module if hasattr(model, "module") else model
+    # c) Compute Grad-CAM for target layer: model.conv3
     target_layer = core_model.conv3
 
-    # Decide which target to explain
+    # Choose target class:
+    # Prefer predicted class if multi-logit output, else let GradCAM handle scalar output.
     with torch.enable_grad():
-        out = model(x)
+        out = core_model(x)
 
-    # If output is (B,2) logits -> use predicted class (more stable than true label)
     if out.ndim == 2 and out.shape[1] >= 2:
         class_idx = int(out.argmax(dim=1).item())
         targets = [ClassifierOutputTarget(class_idx)]
     else:
-        # Single-logit case: don't use ClassifierOutputTarget
-        # (GradCAM will use the scalar output by default if targets=None)
-        targets = None
-    with torch.enable_grad():
-        cam = GradCAM(model=model, target_layers=[target_layer])
-        grayscale_cam = cam(input_tensor=x, targets=targets)[0]
-    # cam = GradCAM(model=model, target_layers=[target_layer])
-    # grayscale_cam = cam(input_tensor=x, targets=targets)[0]  # (H,W)
+        targets = None  # single-logit / scalar output case
 
-    # Prepare base image for overlay: RGB float in [0,1]
+    # Grad-CAM needs gradients and must hook layers from the same model object
+    with torch.enable_grad():
+        cam = GradCAM(model=core_model, target_layers=[target_layer])
+        grayscale_cam = cam(input_tensor=x, targets=targets)[0]  # (H, W)
+
+    # d) Create visualization overlay (HxWx3)
     img = x[0].detach().float().cpu()  # (C,H,W)
     if img.shape[0] == 1:
         img = img.repeat(3, 1, 1)
     rgb = img.permute(1, 2, 0).numpy()  # (H,W,3)
 
-    # Robust scaling to [0,1] even if normalized
+    # Robust scaling to [0,1] even if input was normalized
     rgb = rgb - np.min(rgb)
     mx = np.max(rgb)
     if mx > 1e-8:
