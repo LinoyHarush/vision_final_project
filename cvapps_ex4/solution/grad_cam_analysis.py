@@ -5,6 +5,7 @@ import argparse
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from pytorch_grad_cam import GradCAM
 
 from torch.utils.data import DataLoader
 
@@ -51,36 +52,62 @@ def get_grad_cam_visualization(test_dataset: torch.utils.data.Dataset,
         the true label of that sample (since it is an output of a DataLoader
         of batch size 1, it's a tensor of shape (1,)).
     """
-    model.eval()
-
-    # (b) sample a single image with DataLoader (batch_size=1, shuffle=True)
-    loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
-    samples, true_label = next(iter(loader))  # samples: (1,3,256,256), true_label: (1,)
+    import numpy as np
+    import torch
+    from torch.utils.data import DataLoader
+    from pytorch_grad_cam import GradCAM
+    from pytorch_grad_cam.utils.image import show_cam_on_image
+    from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
     device = next(model.parameters()).device
-    samples = samples.to(device)
-    true_label = true_label.to(device)
+    model.eval()
 
-    # (c) compute Grad-CAM for target layer model.conv3
-    # --- minimal assumption: your provided API looks like this ---
-    # cam_extractor = GradCAM(model=model, target_layer=model.conv3)
-    # cam = cam_extractor(samples, class_idx=int(true_label.item()))  # (1,256,256) or (256,256)
-    # visualization = visualize_cam(samples[0], cam[0] if cam.ndim == 3 else cam)
-    #
-    # If your exercise already gave you a specific call pattern, keep it and just plug in:
-    cam_extractor = GradCAM(model=model, target_layer=model.conv3)
-    cam = cam_extractor(samples, class_idx=int(true_label.item()))
+    # Sample one image
+    loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
+    x, y = next(iter(loader))  # x: (1,C,H,W), y: (1,)
+    x = x.to(device)
 
-    # Convert to visualization overlay (expected output: 256x256x3 np.ndarray)
-    # Commonly, visualize_cam expects CHW image tensor on CPU and 2D cam on CPU.
-    cam_2d = cam[0] if cam.ndim == 3 else cam
-    visualization = visualize_cam(samples[0].detach().cpu(), cam_2d.detach().cpu())
+    # IMPORTANT: Grad-CAM needs grads
+    torch.set_grad_enabled(True)
 
-    # Ensure numpy output
-    if isinstance(visualization, torch.Tensor):
-        visualization = visualization.detach().cpu().numpy()
+    # Handle DataParallel / DDP style wrapping
+    core_model = model.module if hasattr(model, "module") else model
+    target_layer = core_model.conv3
 
-    return visualization, true_label.detach().cpu()
+    # Decide which target to explain
+    with torch.enable_grad():
+        out = model(x)
+
+    # If output is (B,2) logits -> use predicted class (more stable than true label)
+    if out.ndim == 2 and out.shape[1] >= 2:
+        class_idx = int(out.argmax(dim=1).item())
+        targets = [ClassifierOutputTarget(class_idx)]
+    else:
+        # Single-logit case: don't use ClassifierOutputTarget
+        # (GradCAM will use the scalar output by default if targets=None)
+        targets = None
+    with torch.enable_grad():
+        cam = GradCAM(model=model, target_layers=[target_layer])
+        grayscale_cam = cam(input_tensor=x, targets=targets)[0]
+    # cam = GradCAM(model=model, target_layers=[target_layer])
+    # grayscale_cam = cam(input_tensor=x, targets=targets)[0]  # (H,W)
+
+    # Prepare base image for overlay: RGB float in [0,1]
+    img = x[0].detach().float().cpu()  # (C,H,W)
+    if img.shape[0] == 1:
+        img = img.repeat(3, 1, 1)
+    rgb = img.permute(1, 2, 0).numpy()  # (H,W,3)
+
+    # Robust scaling to [0,1] even if normalized
+    rgb = rgb - np.min(rgb)
+    mx = np.max(rgb)
+    if mx > 1e-8:
+        rgb = rgb / mx
+    rgb = np.clip(rgb, 0.0, 1.0)
+
+    visualization = show_cam_on_image(rgb, grayscale_cam, use_rgb=True)  # uint8 (H,W,3)
+
+    return visualization, y
 
 
 def main():
