@@ -4,6 +4,7 @@ import argparse
 from torch import nn
 from torch import optim
 
+from cvapps_ex4.solution.bonus_model import BonusMobileNetV3Small
 from utils import load_dataset, load_model
 from trainer import LoggingParameters, Trainer
 
@@ -48,9 +49,9 @@ def main():
     test_dataset = load_dataset(dataset_name=args.dataset, dataset_part='test')
 
     # Model
-    model_name = args.model
-    model = load_model(model_name)
-
+    model_name = "bonus_model"
+    # model = load_model(model_name)
+    model = BonusMobileNetV3Small()
     # Loss
     criterion = nn.CrossEntropyLoss()
 
